@@ -40,11 +40,8 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	for task_id := 0; task_id < ntasks; task_id++ {
 		gp.Add(1)
 
-		worker := <-registerChan
 		go func(tid int) {
 			defer gp.Done()
-
-			res := false
 
 			var args DoTaskArgs
 			args.JobName = jobName
@@ -53,11 +50,15 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 			args.NumOtherPhase = n_other
 			args.File = mapFiles[tid]
 
-			for !res {
-				res = call(worker, "Worker.DoTask", args, nil)
-				go func() {
-					registerChan <- worker // should not block
-				}()
+			for {
+				worker := <-registerChan
+				res := call(worker, "Worker.DoTask", args, nil)
+				if res {
+					go func() {
+						registerChan <- worker
+					}()
+					break
+				}
 			}
 		}(task_id)
 	}
